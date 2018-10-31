@@ -1,0 +1,22 @@
+{
+  "name": "nation-cache",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ethers": "^3.0.25",
+    "eventemitter3": "^3.1.0",
+    "express": "^4.16.3",
+    "reconnecting-websocket": "^4.0.0-rc5",
+    "uuid4": "^1.0.0",
+    "websocket": "^1.0.26",
+    "ws": "^5.2.2"
+  }
+}
