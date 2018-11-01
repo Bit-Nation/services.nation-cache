@@ -1,62 +1,72 @@
 const express = require('express');
 const app = express();
+
 const ethers = require('ethers');
-const WebSocketProvider = require('./WebSocketProvider');
+const InfuraProvider = ethers.providers.InfuraProvider;
+
 const {nationABI, nationProdAddress, nationDevAddress} = require('./constants');
 
-const WebSocket = require('websocket').w3cwebsocket;
-global.WebSocket = WebSocket;
+// If for some reason the configuration is reset or fails on the server, 
+// then this default key, exposed to the public, will be used as a fallback
+// This key is exposed to the public, but not used by default
+const fallbackKey = '8a7509ce6b0744b2a6e93c8de5b2faec'; 
 
-const devProvider = new WebSocketProvider('rinkeby');
+const infuraKey = process.env['app_infuraKey'] || fallbackKey; 
 
-const prodNationData = [];
+const environments = ['development', 'production'];
 
-(() => {
-    const provider = new WebSocketProvider('homestead');
+const getEnvVars = (env) => {
+    if (env == 'development') {
+        return {
+            provider: new InfuraProvider('rinkeby'),
+            nationContractAddress: nationDevAddress,
+            startBlock: 2375943
+        };
+    }
+    else if (env == 'production') {
+        return {
+            provider: new InfuraProvider('homestead', infuraKey),
+            nationContractAddress: nationProdAddress,
+            startBlock: 4977201
+        };
+    }
+    else {
+        throw "Unsupported env!";
+    }
+};
 
-    const contract = new ethers.Contract(nationProdAddress, nationABI, provider);
+(async () => {
+    for(i in environments) {
+        let env = environments[i];
+        let envVars = getEnvVars(env);
 
-    contract.onnationcreated = function () {
-        const log = this;
-        prodNationData.push({
-            tx_hash: log.transactionHash,
-            id: log.args.nationId.toNumber(),
-        })
-    };
+        let provider = envVars.provider;
+        let contract = new ethers.Contract(envVars.nationContractAddress, nationABI, provider);
 
-    provider.resetEventsBlock(4977201);
+        let nationData = [];
+        contract.on('NationCreated', (founderAddress, nationId, ev) => {
+            let log = ev;
+            nationData.push({
+                tx_hash: log.transactionHash,
+                id: log.args.nationId.toNumber(),
+            })
+        });
+
+        //This is needed in order to get past, historical events
+        provider.resetEventsBlock(envVars.startBlock);
+
+        // Returns all nation information. 
+        app.get(`/nations/${env}`, (req, res) => {
+            res.send(nationData);
+        });
+
+        const serve = (name, f) => app.get(`/nations/${env}/${name}`, f);
+
+        // Returns the total number of nations on the blockchain
+        serve("count", async (req, res) => {
+            res.send((await contract.numNations()).toNumber().toString());
+        });
+    }
 })();
 
-app.get('/nations/production', (req, res) => res.send(prodNationData));
-
-const devNationData = [];
-(() => {
-    const provider = new WebSocketProvider('rinkeby');
-
-    const contract = new ethers.Contract(nationDevAddress, nationABI, provider);
-
-    contract.onnationcreated = function () {
-        const log = this;
-        devNationData.push({
-            tx_hash: log.transactionHash,
-            id: log.args.nationId.toNumber(),
-        })
-    };
-
-    provider.resetEventsBlock(2375943);
-})();
-
-app.get('/nations/development', (req, res) => res.send(devNationData));
-
-/**
-
-
- app.get('/nations/development', (req, res) => {
-
-    console.log(req);
-    res.send({key: "nations development"})
-
-});
-
-*/
-app.listen(process.env.PORT || 3000, () => console.log(`Listening on ${process.env.PORT || 3000}`))
+app.listen(process.env.PORT || 3000, () => console.log(`Listening on ${process.env.PORT || 3000}`));
